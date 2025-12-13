@@ -725,6 +725,12 @@ Exemples d'utilisation:
 
   # Accélérer le téléchargement (plus de requêtes simultanées)
   python main.py --rate-limit 10 --max-concurrent 20
+
+  # Utiliser Hugging Face Inference API pour les embeddings
+  python main.py --use-inference-api --inference-api-url http://localhost:8080
+
+  # Avec token Hugging Face
+  python main.py --use-inference-api --inference-api-token hf_xxx
         """
     )
 
@@ -814,6 +820,23 @@ Exemples d'utilisation:
         default=None,
         choices=['cpu', 'cuda'],
         help="Device pour le modèle d'embedding (None = auto-détection GPU, 'cpu' ou 'cuda'). Force l'utilisation du GPU si 'cuda'"
+    )
+    parser.add_argument(
+        "--use-inference-api",
+        action="store_true",
+        help="Utiliser Hugging Face Inference API au lieu du modèle local pour les embeddings"
+    )
+    parser.add_argument(
+        "--inference-api-token",
+        type=str,
+        default=None,
+        help="Token Hugging Face pour l'Inference API (ou définir HUGGINGFACE_API_TOKEN)"
+    )
+    parser.add_argument(
+        "--inference-api-url",
+        type=str,
+        default=None,
+        help="URL de base pour l'Inference API (ou définir HUGGINGFACE_INFERENCE_API_URL)"
     )
     parser.add_argument(
         "--reset",
@@ -943,12 +966,23 @@ Exemples d'utilisation:
 
     # Initialiser le VectorStore
     print("=== Initialisation du VectorStore ===")
-    store = VectorStore(
-        collection_name=args.collection_name,
-        db_path=args.db_path,
-        embedding_model=args.embedding_model,
-        device=args.device
-    )
+    if args.use_inference_api:
+        print("Mode Inference API activé")
+        store = VectorStore(
+            collection_name=args.collection_name,
+            db_path=args.db_path,
+            embedding_model=args.embedding_model,
+            use_inference_api=True,
+            inference_api_token=args.inference_api_token,
+            inference_api_base_url=args.inference_api_url
+        )
+    else:
+        store = VectorStore(
+            collection_name=args.collection_name,
+            db_path=args.db_path,
+            embedding_model=args.embedding_model,
+            device=args.device
+        )
     print()
 
     # Afficher les statistiques avant

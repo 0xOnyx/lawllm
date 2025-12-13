@@ -19,6 +19,9 @@ chromadb>=0.4.22
 # Embeddings (local, gratuit)
 sentence-transformers>=2.2.2
 
+# Hugging Face Inference API
+huggingface_hub>=0.20.0
+
 # Progress bars
 tqdm>=4.66.0
 
