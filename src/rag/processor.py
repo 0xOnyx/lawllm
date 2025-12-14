@@ -3,11 +3,14 @@ Module de découpage des documents par pages et par tokens.
 
 Ce module permet de découper les documents en chunks d'environ 3 pages
 ou en chunks basés sur le nombre de tokens avec chevauchement.
+
+Note: Ce module utilise le tokenizer du modèle E5 (intfloat/multilingual-e5-base)
+pour garantir que les chunks respectent la limite de 512 tokens du modèle.
 """
 from typing import List, Optional
-import tiktoken
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
+from transformers import AutoTokenizer
 from ..models import ScrapedDocument, TextChunk
 
 
@@ -16,6 +19,11 @@ from ..models import ScrapedDocument, TextChunk
 CHARS_PER_PAGE = 2700
 PAGES_PER_CHUNK = 3
 CHARS_PER_CHUNK = CHARS_PER_PAGE * PAGES_PER_CHUNK
+
+# Modèle E5 par défaut (doit correspondre à celui utilisé dans vector_store.py)
+DEFAULT_E5_MODEL = "intfloat/multilingual-e5-base"
+# Limite de tokens du modèle E5
+E5_MAX_TOKENS = 512
 
 
 def chunk_document_by_pages(
@@ -79,40 +87,49 @@ def chunk_document_by_pages(
     return chunks
 
 
-# Cache global pour l'encodeur (partagé entre processus)
-_encoding_cache = {}
+# Cache global pour le tokenizer (partagé entre processus)
+_tokenizer_cache = {}
 
 
-def _get_encoding(encoding_name: str = "cl100k_base"):
-    """Récupère ou crée un encodeur tiktoken (mise en cache)."""
-    if encoding_name not in _encoding_cache:
-        try:
-            _encoding_cache[encoding_name] = tiktoken.get_encoding(encoding_name)
-        except KeyError:
-            _encoding_cache[encoding_name] = tiktoken.get_encoding("cl100k_base")
-    return _encoding_cache[encoding_name]
+def _get_tokenizer(model_name: str = DEFAULT_E5_MODEL):
+    """
+    Récupère ou crée un tokenizer HuggingFace (mise en cache).
+    
+    Args:
+        model_name: Nom du modèle HuggingFace (défaut: multilingual-e5-base)
+        
+    Returns:
+        AutoTokenizer pour le modèle spécifié
+    """
+    if model_name not in _tokenizer_cache:
+        # Charger le tokenizer sans limite de longueur (on gère nous-mêmes le découpage)
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        # Désactiver l'avertissement de longueur max (on découpe manuellement après)
+        tokenizer.model_max_length = 1_000_000  # Valeur très grande pour éviter les warnings
+        _tokenizer_cache[model_name] = tokenizer
+    return _tokenizer_cache[model_name]
 
 
 def chunk_document_by_tokens(
     document: ScrapedDocument,
-    max_tokens: int = 500,
+    max_tokens: int = E5_MAX_TOKENS,
     overlap_ratio: float = 0.2,
-    encoding_name: str = "cl100k_base",
-    encoding: Optional[tiktoken.Encoding] = None
+    model_name: str = DEFAULT_E5_MODEL,
+    tokenizer = None
 ) -> List[TextChunk]:
     """
     Découpe un document en chunks basés sur le nombre de tokens avec chevauchement.
     
-    Cette fonction utilise tiktoken pour compter les tokens et crée des chunks
-    avec un overlap calculé automatiquement selon le ratio spécifié.
+    Cette fonction utilise le tokenizer du modèle E5 pour compter les tokens et crée 
+    des chunks avec un overlap calculé automatiquement selon le ratio spécifié.
     
     Args:
         document: Document à découper
-        max_tokens: Nombre maximum de tokens par chunk (défaut: 500)
+        max_tokens: Nombre maximum de tokens par chunk (défaut: 512 pour E5)
         overlap_ratio: Ratio d'overlap entre chunks (défaut: 0.2 = 20%)
-                      Exemple: max_tokens=500, overlap_ratio=0.2 → overlap=100 tokens
-        encoding_name: Nom de l'encodage tiktoken à utiliser (défaut: "cl100k_base")
-        encoding: Encodeur tiktoken pré-initialisé (optionnel, pour éviter de le recréer)
+                      Exemple: max_tokens=512, overlap_ratio=0.2 → overlap=102 tokens
+        model_name: Nom du modèle HuggingFace pour le tokenizer (défaut: multilingual-e5-base)
+        tokenizer: Tokenizer pré-initialisé (optionnel, pour éviter de le recréer)
         
     Returns:
         Liste de TextChunk avec métadonnées
@@ -120,16 +137,16 @@ def chunk_document_by_tokens(
     if not document.content or len(document.content.strip()) == 0:
         return []
     
-    # Utiliser l'encodeur fourni ou en créer un nouveau
-    if encoding is None:
-        encoding = _get_encoding(encoding_name)
+    # Utiliser le tokenizer fourni ou en créer un nouveau
+    if tokenizer is None:
+        tokenizer = _get_tokenizer(model_name)
     
     # Calculer l'overlap en tokens
     overlap_tokens = int(max_tokens * overlap_ratio)
     
     # Encoder le texte complet en tokens
     text = document.content
-    tokens = encoding.encode(text)
+    tokens = tokenizer.encode(text, add_special_tokens=False)
     
     if len(tokens) == 0:
         return []
@@ -146,7 +163,7 @@ def chunk_document_by_tokens(
         chunk_tokens = tokens[start:end]
         
         # Décoder les tokens en texte
-        chunk_text = encoding.decode(chunk_tokens)
+        chunk_text = tokenizer.decode(chunk_tokens, skip_special_tokens=True)
         
         # Créer le chunk
         chunk = _create_chunk(chunk_text, document, chunk_index)
@@ -172,9 +189,9 @@ def chunk_document_by_tokens(
 def _chunk_document_worker(args):
     """
     Fonction worker pour le traitement parallèle.
-    Prend un tuple (document_dict, max_tokens, overlap_ratio, encoding_name).
+    Prend un tuple (document_dict, max_tokens, overlap_ratio, model_name).
     """
-    document_dict, max_tokens, overlap_ratio, encoding_name = args
+    document_dict, max_tokens, overlap_ratio, model_name = args
     
     # Reconstruire le document depuis le dictionnaire
     document = ScrapedDocument(**document_dict)
@@ -184,15 +201,15 @@ def _chunk_document_worker(args):
         document,
         max_tokens=max_tokens,
         overlap_ratio=overlap_ratio,
-        encoding_name=encoding_name
+        model_name=model_name
     )
 
 
 def chunk_documents_batch(
     documents: List[ScrapedDocument],
-    max_tokens: int = 500,
+    max_tokens: int = E5_MAX_TOKENS,
     overlap_ratio: float = 0.2,
-    encoding_name: str = "cl100k_base",
+    model_name: str = DEFAULT_E5_MODEL,
     max_workers: Optional[int] = None,
     desc: str = "Chunking documents"
 ) -> List[TextChunk]:
@@ -204,9 +221,9 @@ def chunk_documents_batch(
     
     Args:
         documents: Liste de documents à découper
-        max_tokens: Nombre maximum de tokens par chunk (défaut: 500)
+        max_tokens: Nombre maximum de tokens par chunk (défaut: 512 pour E5)
         overlap_ratio: Ratio d'overlap entre chunks (défaut: 0.2 = 20%)
-        encoding_name: Nom de l'encodage tiktoken à utiliser (défaut: "cl100k_base")
+        model_name: Nom du modèle HuggingFace pour le tokenizer (défaut: multilingual-e5-base)
         max_workers: Nombre maximum de processus parallèles (None = nombre de CPUs)
         desc: Description pour la barre de progression
         
@@ -216,12 +233,16 @@ def chunk_documents_batch(
     if not documents:
         return []
     
+    print(f"  [Chunking] Utilisation du tokenizer: {model_name}")
+    print(f"  [Chunking] Max tokens par chunk: {max_tokens}")
+    print(f"  [Chunking] Overlap ratio: {overlap_ratio} ({int(max_tokens * overlap_ratio)} tokens)")
+    
     # Convertir les documents en dictionnaires pour la sérialisation
     document_dicts = [doc.model_dump() for doc in documents]
     
     # Préparer les arguments pour chaque worker
     args_list = [
-        (doc_dict, max_tokens, overlap_ratio, encoding_name)
+        (doc_dict, max_tokens, overlap_ratio, model_name)
         for doc_dict in document_dicts
     ]
     

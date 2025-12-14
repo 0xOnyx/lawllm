@@ -129,7 +129,13 @@ class VectorStore:
             )
             print(f"✓ Collection '{self.collection_name}' créée")
     
-    def generate_embeddings(self, texts: List[str], batch_size: int = 128, show_progress: bool = True) -> List[List[float]]:
+    def generate_embeddings(
+        self, 
+        texts: List[str], 
+        batch_size: int = 128, 
+        show_progress: bool = True,
+        is_query: bool = False
+    ) -> List[List[float]]:
         """
         Génère les embeddings pour une liste de textes.
         
@@ -137,6 +143,9 @@ class VectorStore:
             texts: Liste des textes à encoder
             batch_size: Taille des batches pour le traitement (défaut: 128, augmenté pour de meilleures performances)
             show_progress: Afficher la barre de progression
+            is_query: Si True, ajoute le préfixe "query: " (pour les requêtes de recherche).
+                      Si False, ajoute le préfixe "passage: " (pour les documents à indexer).
+                      Ces préfixes sont requis par les modèles E5 pour de meilleures performances.
             
         Returns:
             Liste des embeddings (chaque embedding est une liste de floats)
@@ -144,13 +153,13 @@ class VectorStore:
         if not texts:
             return []
         
-        # Optimisation: utiliser un batch_size plus grand pour de meilleures performances
-        # Ajuster automatiquement selon la taille des données
-        if len(texts) > 10000:
-            # Pour de très gros volumes, augmenter encore le batch_size
-            effective_batch_size = max(batch_size, 256)
-        else:
-            effective_batch_size = batch_size
+        # Ajouter les préfixes requis par les modèles E5
+        # Voir: https://huggingface.co/intfloat/multilingual-e5-base
+        prefix = "query: " if is_query else "passage: "
+        prefixed_texts = [prefix + text for text in texts]
+        
+
+        effective_batch_size = batch_size
         
         # Vérifier et afficher le device utilisé
         try:
@@ -186,6 +195,7 @@ class VectorStore:
             
             print(f"  [Embeddings] Batch size: {effective_batch_size}")
             print(f"  [Embeddings] Nombre de textes à encoder: {len(texts)}")
+            print(f"  [Embeddings] Préfixe E5 utilisé: '{prefix}'")
             
         except ImportError:
             print(f"  [Embeddings] ⚠ PyTorch non disponible, impossible de vérifier le device")
@@ -205,7 +215,7 @@ class VectorStore:
             # Note: device n'est pas passé car encode() utilise automatiquement le device du modèle
         }
         
-        embeddings = self.embedding_model.encode(texts, **encode_kwargs)
+        embeddings = self.embedding_model.encode(prefixed_texts, **encode_kwargs)
         
         # Afficher un message de confirmation après génération
         try:
@@ -331,9 +341,10 @@ class VectorStore:
         Returns:
             Liste des résultats avec leurs métadonnées et scores de similarité
         """
-        # Générer l'embedding de la requête
+        # Générer l'embedding de la requête avec le préfixe "query: " requis par E5
+        prefixed_query = "query: " + query
         query_embedding = self.embedding_model.encode(
-            query,
+            prefixed_query,
             convert_to_numpy=True,
             normalize_embeddings=True
         ).tolist()

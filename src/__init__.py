@@ -37,6 +37,12 @@ from .rag import (
     load_summarized_chunks,
     VectorStore,
     create_vector_store,
+    Reranker,
+    create_reranker,
+    OllamaGenerator,
+    OpenAIGenerator,
+    LLMGenerator,
+    create_generator,
 )
 
 __version__ = "0.1.0"
@@ -67,4 +73,11 @@ __all__ = [
     "load_summarized_chunks",
     "VectorStore",
     "create_vector_store",
+    # RAG Query (reranking et génération)
+    "Reranker",
+    "create_reranker",
+    "OllamaGenerator",
+    "OpenAIGenerator",
+    "LLMGenerator",  # Alias for OllamaGenerator
+    "create_generator",
 ]

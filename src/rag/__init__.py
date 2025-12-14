@@ -10,6 +10,9 @@ Ce module contient :
 - check_ollama_connection: Vérification de la connexion Ollama
 - list_available_models: Liste des modèles Ollama disponibles
 - VectorStore: Gestionnaire de stockage vectoriel avec ChromaDB
+- Reranker: Reranking des résultats avec cross-encoder
+- OllamaGenerator: Génération de réponses avec Ollama (local)
+- OpenAIGenerator: Génération de réponses avec OpenAI API
 """
 from .processor import chunk_document_by_pages, chunk_document_by_tokens, chunk_documents_batch
 from .summarizer import (
@@ -20,6 +23,14 @@ from .summarizer import (
     load_summarized_chunks,
 )
 from .vector_store import VectorStore, create_vector_store
+from .reranker import Reranker, create_reranker
+from .llm import (
+    OllamaGenerator,
+    OpenAIGenerator,
+    create_generator,
+    # Alias pour compatibilité
+    OllamaGenerator as LLMGenerator,
+)
 
 __all__ = [
     "chunk_document_by_pages",
@@ -32,5 +43,11 @@ __all__ = [
     "load_summarized_chunks",
     "VectorStore",
     "create_vector_store",
+    "Reranker",
+    "create_reranker",
+    "OllamaGenerator",
+    "OpenAIGenerator",
+    "LLMGenerator",  # Alias for OllamaGenerator (backward compatibility)
+    "create_generator",
 ]
 

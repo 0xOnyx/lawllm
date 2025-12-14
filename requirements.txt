@@ -16,8 +16,12 @@ pydantic>=2.5.0
 # Vector database for RAG
 chromadb>=0.4.22
 
-# Embeddings (local, gratuit)
+# Embeddings et reranking (local, gratuit)
 sentence-transformers>=2.2.2
+FlagEmbedding>=1.2.0
+
+# Tokenizer pour le chunking
+transformers>=4.36.0
 
 # Progress bars
 tqdm>=4.66.0
@@ -32,4 +36,7 @@ pytest-mock>=3.11.0
 
 # Token counting
 tiktoken>=0.5.0
+
+# PyTorch (pour GPU support)
+torch>=2.0.0
 
