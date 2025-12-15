@@ -251,6 +251,47 @@ class RAGQueryEngine:
         return results
 
 
+def format_source_links(sources: list) -> str:
+    """
+    Formate les liens directs (PDF/HTML) des sources.
+    
+    Args:
+        sources: Liste des documents sources avec métadonnées
+        
+    Returns:
+        Chaîne formatée avec les liens
+    """
+    if not sources:
+        return ""
+    
+    links_parts = []
+    for i, src in enumerate(sources, 1):
+        meta = src.get('metadata', {})
+        url = meta.get('entscheidsuche_url')
+        
+        if not url:
+            continue
+        
+        # Détecter le type de fichier
+        file_type = "Document"
+        if url.endswith('.pdf'):
+            file_type = "PDF"
+        elif url.endswith('.html') or url.endswith('.htm'):
+            file_type = "HTML"
+        elif url.endswith('.json'):
+            file_type = "JSON"
+        
+        case_number = meta.get('case_number', 'N/A')
+        date = meta.get('date', 'N/A')
+        
+        links_parts.append(f"  [{i}] {case_number} - {date}")
+        links_parts.append(f"      📄 {file_type}: {url}")
+    
+    if links_parts:
+        return "\n" + "\n".join(links_parts)
+    return ""
+
+
 def run_interactive(engine: RAGQueryEngine):
     """Mode interactif pour poser des questions."""
     print("\n" + "=" * 60)
@@ -309,16 +350,21 @@ Commandes disponibles:
             print("=" * 60)
             print(f"\n{result['answer']}")
             
-            # Afficher les sources
+            # Afficher les sources avec liens directs
             if result['sources']:
                 print("\n" + "-" * 60)
                 print("  📚 SOURCES")
                 print("-" * 60)
-                for i, src in enumerate(result['sources'], 1):
-                    meta = src.get('metadata', {})
-                    print(f"  [{i}] {meta.get('case_number', 'N/A')} - {meta.get('date', 'N/A')}")
-                    if meta.get('entscheidsuche_url'):
-                        print(f"      URL: {meta['entscheidsuche_url']}")
+                links_text = format_source_links(result['sources'])
+                if links_text:
+                    print(links_text)
+                else:
+                    # Fallback si pas de liens formatés
+                    for i, src in enumerate(result['sources'], 1):
+                        meta = src.get('metadata', {})
+                        print(f"  [{i}] {meta.get('case_number', 'N/A')} - {meta.get('date', 'N/A')}")
+                        if meta.get('entscheidsuche_url'):
+                            print(f"      URL: {meta['entscheidsuche_url']}")
             
         except KeyboardInterrupt:
             print("\n\nInterrompu par l'utilisateur.")
@@ -504,9 +550,16 @@ Examples:
                     print("\n" + "-" * 60)
                     print("  📚 SOURCES")
                     print("-" * 60)
-                    for i, src in enumerate(result['sources'], 1):
-                        meta = src.get('metadata', {})
-                        print(f"  [{i}] {meta.get('case_number', 'N/A')} - {meta.get('date', 'N/A')}")
+                    links_text = format_source_links(result['sources'])
+                    if links_text:
+                        print(links_text)
+                    else:
+                        # Fallback si pas de liens formatés
+                        for i, src in enumerate(result['sources'], 1):
+                            meta = src.get('metadata', {})
+                            print(f"  [{i}] {meta.get('case_number', 'N/A')} - {meta.get('date', 'N/A')}")
+                            if meta.get('entscheidsuche_url'):
+                                print(f"      URL: {meta['entscheidsuche_url']}")
     
     except KeyboardInterrupt:
         print("\n\nInterrompu par l'utilisateur.")

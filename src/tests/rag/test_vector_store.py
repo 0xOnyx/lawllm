@@ -229,3 +229,5 @@ def test_batch_indexing(vector_store, sample_summarized_chunks):
     stats = vector_store.get_collection_stats()
     assert stats['total_documents'] == len(all_chunks)
 
+
+

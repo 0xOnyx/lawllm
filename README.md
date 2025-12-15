@@ -333,3 +333,6 @@ Voir le fichier LICENSE pour plus de détails.
 ## 🤝 Contribution
 
 Les contributions sont les bienvenues ! N'hésitez pas à ouvrir une issue ou une pull request.
+
+
+python .\main.py --spiders VD_FindInfo --from-documents  --embedding-batch-size 50 --skip-summarization --max-workers 32 --device cuda   
